@@ -1,0 +1,12 @@
+venv/
+env/
+
+.idea/
+__pycache__/
+*.pyc
+
+.env
+
+workspace/
+results/
+.pytest_cache/
