@@ -10,5 +10,7 @@ pytest-cov
 codecarbon
 # Tokenizer OpenAI: Indispensabile per contare i token in entrata/uscita e calcolare l'efficienza
 tiktoken
+# HTTP client: Richieste al server locale di Ollama
+requests
 # Sicurezza: Carica i segreti dal file .env nascondendo le chiavi API dal codice sorgente
 python-dotenv
