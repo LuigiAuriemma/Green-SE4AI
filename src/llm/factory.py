@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 
 # Importiamo il client locale che abbiamo appena scritto
 from src.llm.slm_client import SLMClient
-# (L'import del cloud lo lasciamo commentato finché il tuo collega non lo implementerà)
-# from src.llm.llm_clients import LLMClient 
+from src.llm.github_client import LLMClient
+from src.llm.gemini_client import GeminiClient
 
 # Carica le variabili dal file .env
 load_dotenv()
@@ -26,12 +26,34 @@ class LLMFactory:
             # Restituisce il client locale pronto all'uso
             return SLMClient(model_name=model_name, base_url=base_url)
         
-        elif provider == "cloud":
-            # Questa parte sarà gestita dalla Card 5 del tuo collega
-            print("[Factory] Attivazione modulo Cloud...")
-            raise NotImplementedError(
-                "Il client Cloud (Card 5) non è ancora stato implementato dal tuo collega."
+        elif provider == "github":
+            print("[Factory] Attivazione modulo GitHub...")
+            model_name = os.getenv("GITHUB_MODEL", "gpt-4o")
+            base_url = os.getenv(
+                "GITHUB_BASE_URL",
+                "https://models.inference.ai.azure.com",
+            )
+            api_key = os.getenv("GITHUB_TOKEN", "")
+
+            return LLMClient(
+                model_name=model_name,
+                base_url=base_url,
+                api_key=api_key,
             )
         
+        elif provider == "gemini":
+            print("[Factory] Attivazione modulo Google Gemini...")
+            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+            base_url = os.getenv(
+                "GEMINI_BASE_URL",
+                "https://generativelanguage.googleapis.com/v1beta/",
+            )
+            api_key = os.getenv("GEMINI_API_KEY", "")
+
+            return GeminiClient(
+                model_name=model_name,
+                base_url=base_url,
+                api_key=api_key,
+            )
         else:
             raise ValueError(f"LLM_PROVIDER non riconosciuto nel file .env: {provider}")

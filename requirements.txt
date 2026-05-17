@@ -12,5 +12,9 @@ codecarbon
 tiktoken
 # HTTP client: Richieste al server locale di Ollama
 requests
+# SDK OpenAI: Necessaria per GitHub Models via endpoint OpenAI-compatibile
+openai
 # Sicurezza: Carica i segreti dal file .env nascondendo le chiavi API dal codice sorgente
 python-dotenv
+# SDK Google Gemini
+google-genai

@@ -25,12 +25,21 @@ def main():
     try:
         client = LLMFactory.get_client()
         provider = os.getenv("LLM_PROVIDER", "local").lower()
-        model_name = os.getenv("OLLAMA_MODEL" if provider == "local" else "OPENAI_MODEL", "unknown")
+        if provider == "local":
+            model_name = os.getenv("OLLAMA_MODEL", "novaforgeai/qwen2.5-3b:q4km")
+        elif provider == "github":
+            model_name = os.getenv("GITHUB_MODEL", "gpt-4o-mini")
+        elif provider == "gemini":
+            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        else:
+            raise ValueError(f"Provider non supportato: {provider}")
     except Exception as e:
         print(f"[Errore Factory] {e}")
         return
 
     print(f"\n=== INIZIO BENCHMARK SU {len(dataset)} PROBLEMI ===")
+
+    any_output = False
 
     # CICLO PRINCIPALE: Scorre i problemi uno alla volta
     for index, problema in enumerate(dataset):
@@ -60,21 +69,26 @@ def main():
         execution_time = time.time() - start_time
         print(f" -> [Timer] Completato in {execution_time:.2f} secondi.")
 
-        # Scrittura dei dati (aggiorna o inserisce senza duplicare)
-        log_benchmark_result(
-            task_id=task_id,
-            provider=provider,
-            model_name=model_name,
-            prompt_input=prompt_codice,
-            output=codice_test_generato,
-            input_tokens=prompt_tokens,
-            output_tokens=completion_tokens,
-            execution_time=execution_time,
-            status=status,
-            error_msg=error_msg
-        )
+        if codice_test_generato.strip():
+            any_output = True
+            # Scrittura dei dati (aggiorna o inserisce senza duplicare)
+            log_benchmark_result(
+                task_id=task_id,
+                provider=provider,
+                model_name=model_name,
+                prompt_input=prompt_codice,
+                output=codice_test_generato,
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                execution_time=execution_time,
+                status=status,
+                error_msg=error_msg
+            )
 
-    print("\n=== BENCHMARK COMPLETATO ===")
+    if any_output:
+        print("\n=== BENCHMARK COMPLETATO ===")
+    else:
+        print("\n=== BENCHMARK COMPLETATO === (fallimento: nessun dato generato, nessun file salvato)")
 
 if __name__ == "__main__":
     main()
