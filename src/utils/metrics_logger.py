@@ -5,8 +5,8 @@ from datetime import datetime
 
 def log_benchmark_result(task_id, provider, model_name, prompt_input, output, input_tokens, output_tokens, execution_time, status="success", error_msg=""):
     """
-    Salva i dati di benchmark sovrascrivendo i record precedenti se la tripletta
-    (task_id, provider, model_name) esiste già, evitando duplicati nel JSON.
+    Salva i dati di benchmark separando la soluzione (codice da testare) dai test dell'LLM,
+    permettendo un calcolo reale della code coverage della funzione.
     """
     if status == "success" and (not output or not output.strip()):
         return
@@ -21,7 +21,6 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
     os.makedirs(prompts_dir, exist_ok=True)
     os.makedirs(tests_dir, exist_ok=True)
 
-    # Crea una sottocartella per ogni modello per tenere separati i test generati
     safe_model_name = (
         model_name.replace("/", "_")
         .replace("\\", "_")
@@ -31,28 +30,32 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
     model_tests_dir = os.path.join(tests_dir, safe_model_name)
     os.makedirs(model_tests_dir, exist_ok=True)
 
-    # Scrittura del file di prompt (la traccia originale viene salvata comunque qui)
+    # 1. Scrittura del file di prompt (conservato per storico nel vecchio percorso)
     prompt_path = os.path.join(prompts_dir, f"{safe_task_id}.txt")
     with open(prompt_path, "w", encoding="utf-8") as f:
         f.write(prompt_input)
 
-    # Scrittura del file di test (.py)
+    # 2. CREAZIONE DEL FILE SOLUZIONE (Il codice che deve subire il test di coverage)
+    solution_filename = f"solution_{safe_task_id}"
+    solution_path = os.path.join(model_tests_dir, f"{solution_filename}.py")
+    with open(solution_path, "w", encoding="utf-8") as f:
+        f.write(prompt_input)
+
+    # 3. CREAZIONE DEL FILE DI TEST (Contiene solo i test dell'LLM + import dinamico)
     test_path = os.path.join(model_tests_dir, f"test_{safe_task_id}.py")
     with open(test_path, "w", encoding="utf-8") as f:
         if status == "failed":
-            # Se è fallito, il file viene creato ma lasciato completamente vuoto
-            contenuto_completo = ""
+            contenuto_test = ""
         else:
-            # Se ha avuto successo, uniamo la traccia e i test con un divisore pulito
-            contenuto_completo = (
-                f"{prompt_input}\n\n"
+            # Iniettiamo l'importazione automatica per collegare il test alla soluzione separata
+            contenuto_test = (
+                f"from {solution_filename} import *\n\n"
                 f"# ==========================================\n"
                 f"# TEST GENERATI AUTOMATICAMENTE DALL'LLM\n"
                 f"# ==========================================\n\n"
                 f"{output}"
             )
-        
-        f.write(contenuto_completo)
+        f.write(contenuto_test)
 
     # Caricamento del registro JSON esistente
     if os.path.exists(json_file):
@@ -64,7 +67,7 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
     else:
         records = []
 
-    # Struttura del nuovo record corrente
+    # Struttura del nuovo record corrente (aggiunto anche il percorso della soluzione)
     new_record = {
         "task_id": task_id,
         "timestamp": datetime.now().isoformat(),
@@ -79,11 +82,11 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
             "total_tokens": input_tokens + output_tokens
         },
         "prompt_file_path": prompt_path,
+        "solution_file_path": solution_path,  # <--- Tracciato nel JSON
         "test_file_path": test_path,
         "test_verified_status": "pending"
     }
 
-    # Logica di sovrascrittura: evita duplicati per la stessa tripletta
     def is_same_config(record):
         return (
             record.get("task_id") == task_id
@@ -100,25 +103,15 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
     filtered_records.append(new_record)
     records = filtered_records
 
-    # Salvataggio su disco
+    # Salvataggio su disco (JSON)
     with open(json_file, 'w', encoding='utf-8') as f:
         json.dump(records, f, indent=4, ensure_ascii=False)
 
-    # Salvataggio CSV (stesso livello del JSON)
+    # Salvataggio CSV
     fieldnames = [
-        "task_id",
-        "timestamp",
-        "provider",
-        "model_name",
-        "execution_time_seconds",
-        "status",
-        "error_message",
-        "input_tokens",
-        "output_tokens",
-        "total_tokens",
-        "prompt_file_path",
-        "test_file_path",
-        "test_verified_status",
+        "task_id", "timestamp", "provider", "model_name", "execution_time_seconds",
+        "status", "error_message", "input_tokens", "output_tokens", "total_tokens",
+        "prompt_file_path", "solution_file_path", "test_file_path", "test_verified_status"
     ]
 
     with open(csv_file, "w", encoding="utf-8", newline="") as f:
@@ -138,6 +131,7 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
                 "output_tokens": metrics.get("output_tokens", ""),
                 "total_tokens": metrics.get("total_tokens", ""),
                 "prompt_file_path": record.get("prompt_file_path", ""),
+                "solution_file_path": record.get("solution_file_path", ""), # <--- Tracciato nel CSV
                 "test_file_path": record.get("test_file_path", ""),
                 "test_verified_status": record.get("test_verified_status", ""),
             })
