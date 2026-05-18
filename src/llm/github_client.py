@@ -23,6 +23,7 @@ class LLMClient(BaseLLMClient):
 			raise ValueError("GITHUB_TOKEN non impostato nel file .env")
 
 		self.model_name = model_name
+		self.provider = "github"  # Identificativo del provider per il logging e la Factory
 		self.client = OpenAI(base_url=base_url, api_key=api_key)
 
 	def generate_test(self, prompt: str) -> dict:

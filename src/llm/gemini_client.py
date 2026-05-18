@@ -23,6 +23,7 @@ class GeminiClient(BaseLLMClient):
 			raise ValueError("GEMINI_API_KEY non impostata nel file .env")
 
 		self.model_name = model_name
+		self.provider = "gemini"  # Identificativo del provider per il logging e la Factory
 		self.base_url = base_url.rstrip("/")
 		self.api_key = api_key
 		self.client = genai.Client(api_key=self.api_key)

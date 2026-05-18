@@ -17,6 +17,7 @@ class SLMClient(BaseLLMClient):
             base_url (str): Endpoint HTTP di ascolto del demone locale di Ollama.
         """
         self.model_name = model_name
+        self.provider = "local"  # Identificativo del provider per il logging e la Factory
         # Sanificazione dell'URL per evitare duplicazioni delle barre nei path successivi
         self.api_url = f"{base_url.rstrip('/')}/api/generate"
 
