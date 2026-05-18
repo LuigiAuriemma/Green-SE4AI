@@ -58,4 +58,5 @@ class GeminiClient(BaseLLMClient):
 			}
 		except Exception as e:
 			print(f"[Errore Gemini] Generazione fallita: {e}")
-			return {"code": "", "input_tokens": 0, "output_tokens": 0}
+			raise e
+	

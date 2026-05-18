@@ -8,9 +8,8 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
     Salva i dati di benchmark sovrascrivendo i record precedenti se la tripletta
     (task_id, provider, model_name) esiste già, evitando duplicati nel JSON.
     """
-    if not output or not output.strip():
+    if status == "success" and (not output or not output.strip()):
         return
-
     safe_task_id = task_id.replace("/", "_")
     
     base_dir = "results"
@@ -32,16 +31,27 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
     model_tests_dir = os.path.join(tests_dir, safe_model_name)
     os.makedirs(model_tests_dir, exist_ok=True)
 
-    # Scrittura dei file fisici (sovrascrivono automaticamente il vecchio contenuto)
+    # Scrittura del file di prompt (la traccia originale viene salvata comunque qui)
     prompt_path = os.path.join(prompts_dir, f"{safe_task_id}.txt")
     with open(prompt_path, "w", encoding="utf-8") as f:
         f.write(prompt_input)
 
+    # Scrittura del file di test (.py)
     test_path = os.path.join(model_tests_dir, f"test_{safe_task_id}.py")
     with open(test_path, "w", encoding="utf-8") as f:
-        # Uniamo la funzione originale (prompt_input) e i test dell'I.A. (output)
-        # separati da alcune righe vuote per pulizia visiva
-        contenuto_completo = f"{prompt_input}\n\n\n{output}"
+        if status == "failed":
+            # Se è fallito, il file viene creato ma lasciato completamente vuoto
+            contenuto_completo = ""
+        else:
+            # Se ha avuto successo, uniamo la traccia e i test con un divisore pulito
+            contenuto_completo = (
+                f"{prompt_input}\n\n"
+                f"# ==========================================\n"
+                f"# TEST GENERATI AUTOMATICAMENTE DALL'LLM\n"
+                f"# ==========================================\n\n"
+                f"{output}"
+            )
+        
         f.write(contenuto_completo)
 
     # Caricamento del registro JSON esistente

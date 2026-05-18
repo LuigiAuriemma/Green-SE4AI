@@ -55,5 +55,4 @@ class SLMClient(BaseLLMClient):
             }
         except Exception as e:
             print(f"[Errore Ollama] Generazione fallita: {e}")
-            # Ritorna una struttura vuota per non interrompere il flusso della pipeline principale
-            return {"code": "", "input_tokens": 0, "output_tokens": 0}
+            raise e

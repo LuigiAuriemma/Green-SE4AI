@@ -39,7 +39,6 @@ def main():
 
     print(f"\n=== INIZIO BENCHMARK SU {len(dataset)} PROBLEMI ===")
 
-    any_output = False
 
     # CICLO PRINCIPALE: Scorre i problemi uno alla volta
     for index, problema in enumerate(dataset):
@@ -56,7 +55,7 @@ def main():
         completion_tokens = 0
 
         try:
-            # Chiamata al modello (il timeout ora è gestito dentro slm_clients.py)
+            # Chiamata al modello (il timeout è gestito dentro slm_clients.py)
             result = client.generate_test(prompt_codice)
             codice_test_generato = result["code"]
             prompt_tokens = result["input_tokens"]
@@ -69,10 +68,8 @@ def main():
         execution_time = time.time() - start_time
         print(f" -> [Timer] Completato in {execution_time:.2f} secondi.")
 
-        if codice_test_generato.strip():
-            any_output = True
-            # Scrittura dei dati (aggiorna o inserisce senza duplicare)
-            log_benchmark_result(
+         # Scrittura dei dati (aggiorna o inserisce senza duplicare)
+        log_benchmark_result(
                 task_id=task_id,
                 provider=provider,
                 model_name=model_name,
@@ -85,10 +82,10 @@ def main():
                 error_msg=error_msg
             )
 
-    if any_output:
-        print("\n=== BENCHMARK COMPLETATO ===")
+    if error_msg:
+        print("\n=== BENCHMARK COMPLETATO === (fallimento)")
     else:
-        print("\n=== BENCHMARK COMPLETATO === (fallimento: nessun dato generato, nessun file salvato)")
+        print("\n=== BENCHMARK COMPLETATO ===")
 
 if __name__ == "__main__":
     main()

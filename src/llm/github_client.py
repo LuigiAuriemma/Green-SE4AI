@@ -56,4 +56,4 @@ class LLMClient(BaseLLMClient):
 			}
 		except Exception as e:
 			print(f"[Errore GitHub Models] Generazione fallita: {e}")
-			return {"code": "", "input_tokens": 0, "output_tokens": 0}
+			raise e
