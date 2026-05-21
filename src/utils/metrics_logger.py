@@ -135,3 +135,60 @@ def log_benchmark_result(task_id, provider, model_name, prompt_input, output, in
                 "test_file_path": record.get("test_file_path", ""),
                 "test_verified_status": record.get("test_verified_status", ""),
             })
+
+
+def log_eco_batch_result(provider, model_name, prompt_type, total_tasks, failed_tasks, latency_sec, ram_delta_mb,
+                         energy_kwh, co2_g):
+    """
+    Salva le metriche ambientali e di sistema dell'intero batch in un file CSV dedicato.
+    """
+    base_dir = "results"
+    os.makedirs(base_dir, exist_ok=True)
+    csv_file = os.path.join(base_dir, "eco_metrics.csv")
+
+    # Controlliamo se il file esiste già per capire se dobbiamo scrivere l'intestazione
+    file_exists = os.path.isfile(csv_file)
+
+    with open(csv_file, "a", encoding="utf-8", newline="") as f:
+        fieldnames = [
+            "timestamp", "provider", "model_name", "prompt_type", "total_tasks", "failed_tasks",
+            "total_latency_sec", "ram_delta_mb", "energy_kwh", "co2_g"
+        ]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+
+        if not file_exists:
+            writer.writeheader()
+
+        # Funzione per estrarre il numero puro (poichè EcoLogits restituisce un intervallo)
+        def extract_number(val):
+            try:
+                # Se è già un numero o un float puro, lo converte subito
+                return float(val)
+            except (ValueError, TypeError):
+                # Se fallisce, lo trasforma in stringa e cerca il valore medio
+                s = str(val)
+                if 'mean=' in s:
+                    # Taglia a "mean=" e prende il primo numero che trova dopo
+                    numero_sporco = s.split('mean=')[1].split()[0]
+                    return float(numero_sporco)
+                elif 'min=' in s:
+                    # se non c'è mean, prende il min
+                    numero_sporco = s.split('min=')[1].split()[0]
+                    return float(numero_sporco)
+
+                # se è il formato con parentesi quadre
+                return float(s.split()[0])
+
+        writer.writerow({
+            "timestamp": datetime.now().isoformat(),
+            "provider": provider,
+            "model_name": model_name,
+            "prompt_type": prompt_type,
+            "total_tasks": total_tasks,
+            "failed_tasks": failed_tasks,
+            "total_latency_sec": round(extract_number(latency_sec), 4),
+            "ram_delta_mb": round(extract_number(ram_delta_mb), 4),
+            "energy_kwh": round(extract_number(energy_kwh), 8),
+            "co2_g": round(extract_number(co2_g), 6)
+        })
+    print(f"[Logger] Metriche ambientali salvate in {csv_file}")

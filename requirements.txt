@@ -6,8 +6,9 @@ pandas
 pytest
 # Plugin Coverage: Estensione per estrarre la percentuale esatta di codice coperto dai test
 pytest-cov
-# Eco-Tracker: La sonda software per calcolare i kWh consumati e le emissioni di CO2 stimate
+# Eco-Tracker e EcoLogits: La sonda software per calcolare i kWh consumati e le emissioni di CO2 stimate
 codecarbon
+ecologits
 # Tokenizer OpenAI: Indispensabile per contare i token in entrata/uscita e calcolare l'efficienza
 tiktoken
 # HTTP client: Richieste al server locale di Ollama

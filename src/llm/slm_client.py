@@ -39,12 +39,12 @@ class SLMClient(BaseLLMClient):
             "prompt": full_prompt,
             "stream": False,  # Disabilita lo streaming per ricevere il payload completo
             "options": {
-                "temperature": 0.1  # Massimizza il determinismo e la stabilità del codice
+                "temperature": 0.1
             }
         }
 
         try:
-            response = requests.post(self.api_url, json=payload, timeout=300) 
+            response = requests.post(self.api_url, json=payload, timeout=1200)
             response.raise_for_status()
             data = response.json()
             

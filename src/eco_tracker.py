@@ -9,8 +9,8 @@ class EcoTracker:
     Context Manager che avvolge un blocco di codice per misurarne:
     - Tempo di esecuzione (Latenza in secondi)
     - Consumo di memoria RAM (Delta in MB)
-    - Energia consumata (kWh)
-    - Emissioni stimate (Grammi di CO2)
+    - Energia consumata (kWh) (Ibrida: Locale + Cloud)
+    - Emissioni stimate (Grammi di CO2) (Ibrida: Locale + Cloud)
     """
 
     def __init__(self):
@@ -29,20 +29,29 @@ class EcoTracker:
         self.ram_delta_mb = 0.0
         self.energy_kwh = 0.0
         self.co2_g = 0.0
+        self.cloud_energy_kwh = 0.0
+        self.cloud_co2_g = 0.0
+
+    def add_cloud_impacts(self, energy_kwh: float, co2_g: float):
+        """
+        Metodo chiamato dal main loop per accumulare i consumi delle API cloud.
+        """
+        self.cloud_energy_kwh += energy_kwh
+        self.cloud_co2_g += co2_g
 
     def __enter__(self):
         """Fotografia iniziale delle risorse (eseguita all'inizio del blocco 'with')"""
         self.start_time = time.perf_counter()
         self.start_ram = self.process.memory_info().rss
 
-        # Avvia il tracciamento energetico
+        # Avvia il tracciamento energetico locale
         self.tracker.start()
 
-        return self  # Restituisce l'istanza per poter leggere le metriche dopo
+        return self  # Restituisce l'istanza per poter leggere/aggiornare le metriche
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Fotografia finale e calcolo dei delta (eseguita alla fine del blocco 'with')"""
-        # Ferma il tracciamento (restituisce i kg di CO2)
+        # Ferma il tracciamento locale (restituisce i kg di CO2)
         co2_kg = self.tracker.stop()
 
         self.end_time = time.perf_counter()
@@ -54,6 +63,8 @@ class EcoTracker:
         # psutil restituisce i byte, dividiamo per (1024*1024) per avere i MegaByte
         self.ram_delta_mb = (self.end_ram - self.start_ram) / (1024 * 1024)
 
-        # Estraiamo i kWh e convertiamo i kg di CO2 in grammi per maggiore leggibilità
-        self.energy_kwh = self.tracker._total_energy.kWh
-        self.co2_g = co2_kg * 1000
+        # Estraiamo i kWh locali e aggiungiamo i kWh del cloud
+        self.energy_kwh = self.tracker._total_energy.kWh + self.cloud_energy_kwh
+
+        # Convertiamo i kg di CO2 locali in grammi e aggiungiamo i grammi del cloud
+        self.co2_g = (co2_kg * 1000) + self.cloud_co2_g
