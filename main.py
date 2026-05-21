@@ -53,6 +53,7 @@ def esegui_singolo_benchmark(client, problema, provider: str, model_name: str, p
         task_id=task_id,
         provider=provider,
         model_name=model_name,
+        prompt_type=prompt_type,
         prompt_input=prompt_codice,
         output=codice_test_generato,
         input_tokens=prompt_tokens,

@@ -115,8 +115,11 @@ def update_benchmark_files(task_id: str, folder_model_id: str, new_status: str):
                 data = json.load(f)
             updated = False
             for record in data:
-                rec_model_clean = record.get("model_name", "").lower().replace("/", "_").replace(":", "_")
-                if record.get("task_id") == target_task and (folder_model_id.lower() == rec_model_clean or folder_model_id.lower() == record.get("model_name", "").lower()):
+                rec_model_clean = record.get("model_name", "").lower().replace("/", "_").replace(":", "_").replace(" ", "_")
+                rec_prompt_type = record.get("prompt_type", "raw").lower()
+                expected_folder_id = f"{rec_model_clean}-{rec_prompt_type}"
+                
+                if record.get("task_id") == target_task and folder_model_id.lower() == expected_folder_id:
                     record["test_verified_status"] = new_status
                     updated = True
             if updated:
@@ -135,8 +138,11 @@ def update_benchmark_files(task_id: str, folder_model_id: str, new_status: str):
                 if "test_verified_status" not in fieldnames: 
                     fieldnames.append("test_verified_status")
                 for row in reader:
-                    rec_model_clean = row.get("model_name", "").lower().replace("/", "_").replace(":", "_")
-                    if row.get("task_id") == target_task and (folder_model_id.lower() == rec_model_clean or folder_model_id.lower() == row.get("model_name", "").lower()):
+                    rec_model_clean = row.get("model_name", "").lower().replace("/", "_").replace(":", "_").replace(" ", "_")
+                    rec_prompt_type = row.get("prompt_type", "raw").lower()
+                    expected_folder_id = f"{rec_model_clean}-{rec_prompt_type}"
+                    
+                    if row.get("task_id") == target_task and folder_model_id.lower() == expected_folder_id:
                         row["test_verified_status"] = new_status
                     elif "test_verified_status" not in row:
                         row["test_verified_status"] = "pending"
@@ -186,7 +192,18 @@ def main():
 
     for model_id in modelli:
         model_path = os.path.join(base_dir, model_id)
-        print(f"\n[Modello] Testing suite per: {model_id}")
+        
+        # Separazione logica di model_name e prompt_type dal nome della cartella
+        actual_model_name = model_id
+        actual_prompt_type = "raw"
+        if model_id.endswith("-green"):
+            actual_model_name = model_id[:-6]
+            actual_prompt_type = "green"
+        elif model_id.endswith("-raw"):
+            actual_model_name = model_id[:-4]
+            actual_prompt_type = "raw"
+            
+        print(f"\n[Modello] Testing suite per: {actual_model_name} (Prompt: {actual_prompt_type.upper()})")
         print("-" * 66)
         
         # Raccogliamo solo i file di test generati (escludendo i file solution_*.py dedicati alla coverage)
@@ -206,7 +223,7 @@ def main():
                 print("[SALTATO] (File vuoto)")
                 update_benchmark_files(task_id_extracted, model_id, "pending")
                 evaluation_report.append({
-                    "model_id": model_id, "task_id": task_id_extracted.replace("_", "/"), "execution_status": "SKIPPED_EMPTY",
+                    "model_name": actual_model_name, "prompt_type": actual_prompt_type, "task_id": task_id_extracted.replace("_", "/"), "execution_status": "SKIPPED_EMPTY",
                     "coverage": 0.0,
                     "coverage_report": "N/A",
                     "total_tests": 0, "passed": 0, "failed": 0, "errors": 0, "failure_reason": "Generazione fallita o file vuoto"
@@ -260,7 +277,8 @@ def main():
                     
                     update_benchmark_files(task_id_extracted, model_id, "tested")
                     evaluation_report.append({
-                        "model_id": model_id, 
+                        "model_name": actual_model_name,
+                        "prompt_type": actual_prompt_type,
                         "task_id": task_id_extracted.replace("_", "/"), 
                         "execution_status": status_string,
                         "coverage": 0.0,
@@ -305,7 +323,7 @@ def main():
                 update_benchmark_files(task_id_extracted, model_id, "tested")
                 
                 evaluation_report.append({
-                    "model_id": model_id, "task_id": task_id_extracted.replace("_", "/"), "execution_status": status_string,
+                    "model_name": actual_model_name, "prompt_type": actual_prompt_type, "task_id": task_id_extracted.replace("_", "/"), "execution_status": status_string,
                     "coverage": round(coverage, 2),
                     "coverage_report": str(os.path.abspath(html_index_path)) if os.path.exists(html_index_path) else "N/A",
                     "total_tests": metrics["total"], "passed": metrics["passed"], "failed": metrics["failed"], "errors": metrics["errors"], "failure_reason": metrics["reason"]
@@ -315,7 +333,7 @@ def main():
                 print("[TIMEOUT] (Possibile loop)")
                 update_benchmark_files(task_id_extracted, model_id, "tested")
                 evaluation_report.append({
-                    "model_id": model_id, "task_id": task_id_extracted.replace("_", "/"), "execution_status": "TIMEOUT",
+                    "model_name": actual_model_name, "prompt_type": actual_prompt_type, "task_id": task_id_extracted.replace("_", "/"), "execution_status": "TIMEOUT",
                     "coverage": 0.0,
                     "coverage_report": "N/A",
                     "total_tests": 0, "passed": 0, "failed": 0, "errors": 0, "failure_reason": "Timeout esecuzione"
