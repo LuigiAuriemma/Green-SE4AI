@@ -3,6 +3,7 @@ import csv
 import json
 import sys
 import subprocess
+import re
 import xml.etree.ElementTree as ET
 
 def sanitize_test_file(file_path: str):
@@ -100,6 +101,45 @@ def parse_pytest_xml(xml_path: str) -> dict:
     except Exception as e:
         return {"total": 0, "passed": 0, "failed": 0, "errors": 0, "reason": f"Errore parsing XML: {str(e)}"}
 
+def run_mutation_testing(solution_file: str, test_file: str, current_env: dict):
+    """Esegue mutmut per il mutation testing e restituisce le metriche base."""
+    # Imposta runner per mutmut
+    runner = f"{sys.executable} -m pytest {os.path.basename(test_file)} -q"
+    
+    cmd = [
+        sys.executable, "-m", "mutmut", "run",
+        "--paths-to-mutate", os.path.basename(solution_file),
+        "--tests-dir", ".",
+        "--runner", runner,
+        "--simple-output"
+    ]
+    try:
+        work_dir = os.path.dirname(solution_file)
+        # Timeout leggermente più lungo per il mutation testing
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120, env=current_env, cwd=work_dir)
+        output = res.stdout + "\n" + res.stderr
+        
+        killed_match = re.search(r"(?:- )?(\d+)\s+killed", output, re.IGNORECASE)
+        survived_match = re.search(r"(?:- )?(\d+)\s+survived", output, re.IGNORECASE)
+        
+        killed = int(killed_match.group(1)) if killed_match else 0
+        survived = int(survived_match.group(1)) if survived_match else 0
+        total = killed + survived
+        
+        score = (killed / total * 100) if total > 0 else 0.0
+        
+        return {
+            "mutation_score": round(score, 2),
+            "mutants_killed": killed,
+            "mutants_survived": survived,
+            "mutants_total": total
+        }
+    except subprocess.TimeoutExpired:
+        print(" [Timeout Mutmut]", end="")
+        return {"mutation_score": 0.0, "mutants_killed": 0, "mutants_survived": 0, "mutants_total": 0}
+    except Exception as e:
+        print(f" [Errore Mutmut: {e}]", end="")
+        return {"mutation_score": 0.0, "mutants_killed": 0, "mutants_survived": 0, "mutants_total": 0}
 
 def update_benchmark_files(task_id: str, folder_model_id: str, new_status: str):
     """Aggiorna il campo 'test_verified_status' in benchmark_results.json e csv."""
@@ -179,6 +219,16 @@ def main():
             print("   pip install pytest")
             print("==================================================================\n")
             return
+            
+        check_mut_cmd = [sys.executable, "-m", "mutmut", "--help"]
+        res_mut_check = subprocess.run(check_mut_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if res_mut_check.returncode != 0:
+            print("[ERRORE CRITICO] Mutmut non è installato o non è accessibile nel tuo ambiente virtuale (.venv).")
+            print(f"Percorso interprete corrente: {sys.executable}")
+            print("Per favore, installa mutmut eseguendo sul tuo terminale:")
+            print("   pip install mutmut")
+            print("==================================================================\n")
+            return
     except Exception as e:
         print(f"[ERRORE CRITICO] Impossibile eseguire il controllo di pytest: {e}")
         return
@@ -226,7 +276,8 @@ def main():
                     "model_name": actual_model_name, "prompt_type": actual_prompt_type, "task_id": task_id_extracted.replace("_", "/"), "execution_status": "SKIPPED_EMPTY",
                     "coverage": 0.0,
                     "coverage_report": "N/A",
-                    "total_tests": 0, "passed": 0, "failed": 0, "errors": 0, "failure_reason": "Generazione fallita o file vuoto"
+                    "total_tests": 0, "passed": 0, "failed": 0, "errors": 0, "failure_reason": "Generazione fallita o file vuoto",
+                    "mutation_score": 0.0, "mutants_killed": 0, "mutants_survived": 0, "mutants_total": 0
                 })
                 continue
 
@@ -284,7 +335,8 @@ def main():
                         "coverage": 0.0,
                         "coverage_report": "N/A",
                         "total_tests": 0, "passed": 0, "failed": 0, "errors": 0, 
-                        "failure_reason": error_detail[:300]
+                        "failure_reason": error_detail[:300],
+                        "mutation_score": 0.0, "mutants_killed": 0, "mutants_survived": 0, "mutants_total": 0
                     })
                     continue
 
@@ -320,13 +372,21 @@ def main():
                 else:
                     print("")
                 
+                # Esegui mutation testing solo se il test originale è passato
+                if status_string == "PASSED":
+                    solution_full_path = os.path.join(model_path, solution_file_name)
+                    mut_metrics = run_mutation_testing(solution_full_path, file_path, current_env)
+                else:
+                    mut_metrics = {"mutation_score": 0.0, "mutants_killed": 0, "mutants_survived": 0, "mutants_total": 0}
+                
                 update_benchmark_files(task_id_extracted, model_id, "tested")
                 
                 evaluation_report.append({
                     "model_name": actual_model_name, "prompt_type": actual_prompt_type, "task_id": task_id_extracted.replace("_", "/"), "execution_status": status_string,
                     "coverage": round(coverage, 2),
                     "coverage_report": str(os.path.abspath(html_index_path)) if os.path.exists(html_index_path) else "N/A",
-                    "total_tests": metrics["total"], "passed": metrics["passed"], "failed": metrics["failed"], "errors": metrics["errors"], "failure_reason": metrics["reason"]
+                    "total_tests": metrics["total"], "passed": metrics["passed"], "failed": metrics["failed"], "errors": metrics["errors"], "failure_reason": metrics["reason"],
+                    "mutation_score": mut_metrics["mutation_score"], "mutants_killed": mut_metrics["mutants_killed"], "mutants_survived": mut_metrics["mutants_survived"], "mutants_total": mut_metrics["mutants_total"]
                 })
 
             except subprocess.TimeoutExpired:
@@ -336,7 +396,8 @@ def main():
                     "model_name": actual_model_name, "prompt_type": actual_prompt_type, "task_id": task_id_extracted.replace("_", "/"), "execution_status": "TIMEOUT",
                     "coverage": 0.0,
                     "coverage_report": "N/A",
-                    "total_tests": 0, "passed": 0, "failed": 0, "errors": 0, "failure_reason": "Timeout esecuzione"
+                    "total_tests": 0, "passed": 0, "failed": 0, "errors": 0, "failure_reason": "Timeout esecuzione",
+                    "mutation_score": 0.0, "mutants_killed": 0, "mutants_survived": 0, "mutants_total": 0
                 })
             finally:
                 if os.path.exists(xml_temp_path): 

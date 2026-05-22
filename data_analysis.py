@@ -44,7 +44,8 @@ def prepare_data(df_eco, df_eval):
     
     eval_agg = df_eval.groupby(['model_name', 'prompt_type']).agg({
         'coverage': 'mean',
-        'pass_rate': 'mean'
+        'pass_rate': 'mean',
+        'mutation_score': 'mean'
     }).reset_index()
     
     # Merge con eco metrics
@@ -155,7 +156,52 @@ def generate_plots(df_merged, df_eval, output_dir):
     plt.savefig(os.path.join(output_dir, '4_task_coverage_boxplot.png'), dpi=300)
     plt.close()
 
-    print(f"[Successo] Generati {4} grafici nella cartella: {output_dir}")
+    # -----------------------------------------------------
+    # 5. Bar Chart Raggruppato Mutation Score LLM vs SLM
+    # -----------------------------------------------------
+    plt.figure(figsize=(10, 6))
+    if 'mutation_score' in df_merged.columns:
+        sns.barplot(data=df_merged, x='model_type', y='mutation_score', hue='prompt_type', palette="viridis")
+        plt.title('Mutation Score (%) - LLM vs SLM')
+        plt.ylabel('Mutation Score Medio (%)')
+        plt.xlabel('Tipo di Modello')
+        plt.ylim(0, 100)
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, '5_mutation_comparison.png'), dpi=300)
+    plt.close()
+
+    # -----------------------------------------------------
+    # 6. Scatter Plot: Mutation Score vs. Energy Consumption
+    # -----------------------------------------------------
+    plt.figure(figsize=(12, 7))
+    if 'mutation_score' in df_merged.columns:
+        sns.scatterplot(
+            data=df_merged, 
+            x='mutation_score', 
+            y='energy_kwh', 
+            hue='model_type', 
+            style='prompt_type', 
+            s=200, 
+            palette="deep", 
+            markers=['o', 'X']
+        )
+        for i in range(df_merged.shape[0]):
+            plt.text(
+                df_merged['mutation_score'].iloc[i] + 0.5, 
+                df_merged['energy_kwh'].iloc[i], 
+                df_merged['model_name'].iloc[i], 
+                horizontalalignment='left', 
+                size='small', 
+                color='black'
+            )
+        plt.title('Rapporto Qualità / Costo Energetico: Mutation Score vs Consumo (kWh)')
+        plt.xlabel('Mutation Score Medio (%) - (Qualità)')
+        plt.ylabel('Energia (kWh) - (Costo)')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, '6_mutation_vs_energy_scatter.png'), dpi=300)
+    plt.close()
+
+    print(f"[Successo] Generati 6 grafici nella cartella: {output_dir}")
 
 def main():
     print("Avvio Analisi dei Dati...")
@@ -167,7 +213,8 @@ def main():
         generate_plots(df_merged, df_eval_prepared, output_dir)
         
         print("\n--- Riepilogo Analisi (Media per Categoria) ---")
-        summary = df_merged.groupby(['model_type', 'prompt_type'])[['coverage', 'pass_rate', 'energy_kwh']].mean().reset_index()
+        summary_cols = ['coverage', 'pass_rate', 'mutation_score', 'energy_kwh'] if 'mutation_score' in df_merged.columns else ['coverage', 'pass_rate', 'energy_kwh']
+        summary = df_merged.groupby(['model_type', 'prompt_type'])[summary_cols].mean().reset_index()
         print(summary.to_string(index=False))
         
     except Exception as e:
