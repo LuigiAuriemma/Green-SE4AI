@@ -29,27 +29,10 @@ def log_benchmark_result(task_id, provider, model_name, prompt_type, prompt_inpu
     model_tests_dir = os.path.join(tests_dir, folder_name)
     os.makedirs(model_tests_dir, exist_ok=True)
 
-    # 1. CREAZIONE DEL FILE SOLUZIONE (Il codice che deve subire il test di coverage)
+    # 1. CREAZIONE DEL FILE SOLUZIONE E TEST PATHS
     solution_filename = f"solution_{safe_task_id}"
     solution_path = os.path.join(model_tests_dir, f"{solution_filename}.py")
-    with open(solution_path, "w", encoding="utf-8") as f:
-        f.write(prompt_input)
-
-    # 2. CREAZIONE DEL FILE DI TEST (Contiene solo i test dell'LLM + import dinamico)
     test_path = os.path.join(model_tests_dir, f"test_{safe_task_id}.py")
-    with open(test_path, "w", encoding="utf-8") as f:
-        if status == "failed":
-            contenuto_test = ""
-        else:
-            # Iniettiamo l'importazione automatica per collegare il test alla soluzione separata
-            contenuto_test = (
-                f"from {solution_filename} import *\n\n"
-                f"# ==========================================\n"
-                f"# TEST GENERATI AUTOMATICAMENTE DALL'LLM\n"
-                f"# ==========================================\n\n"
-                f"{output}"
-            )
-        f.write(contenuto_test)
 
     # Caricamento del registro JSON esistente
     if os.path.exists(json_file):
@@ -61,26 +44,6 @@ def log_benchmark_result(task_id, provider, model_name, prompt_type, prompt_inpu
     else:
         records = []
 
-    # Struttura del nuovo record corrente (aggiunto anche il percorso della soluzione)
-    new_record = {
-        "task_id": task_id,
-        "timestamp": datetime.now().isoformat(),
-        "provider": provider,
-        "model_name": model_name,
-        "prompt_type": prompt_type,
-        "execution_time_seconds": round(execution_time, 2),
-        "status": status,
-        "error_message": error_msg,
-        "metrics": {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "total_tokens": input_tokens + output_tokens
-        },
-        "solution_file_path": solution_path,  # <--- Tracciato nel JSON
-        "test_file_path": test_path,
-        "test_verified_status": "pending"
-    }
-
     def is_same_config(record):
         return (
             record.get("task_id") == task_id
@@ -89,14 +52,55 @@ def log_benchmark_result(task_id, provider, model_name, prompt_type, prompt_inpu
             and record.get("prompt_type", "raw") == prompt_type
         )
 
-    filtered_records = [record for record in records if not is_same_config(record)]
-    if len(filtered_records) != len(records):
-        print(f"[Logger] Record esistente aggiornato per {task_id} ({model_name} - {prompt_type}).")
+    if status == "failed":
+        # Se c'è un errore, ignoriamo l'aggiornamento.
+        # Manteniamo intatti i file e i record precedenti per questo task.
+        print(f"[Logger] Run di {task_id} ({model_name} - {prompt_type}) fallita. Nessuna modifica ai log o ai file precedenti.")
+        return
     else:
-        print(f"[Logger] Nuovo record registrato per {task_id} ({model_name} - {prompt_type}).")
+        # 1. SALVATAGGIO FILE SOLUZIONE
+        with open(solution_path, "w", encoding="utf-8") as f:
+            f.write(prompt_input)
 
-    filtered_records.append(new_record)
-    records = filtered_records
+        # 2. SALVATAGGIO FILE DI TEST
+        with open(test_path, "w", encoding="utf-8") as f:
+            contenuto_test = (
+                f"from {solution_filename} import *\n\n"
+                f"# ==========================================\n"
+                f"# TEST GENERATI AUTOMATICAMENTE DALL'LLM\n"
+                f"# ==========================================\n\n"
+                f"{output}"
+            )
+            f.write(contenuto_test)
+
+        # Struttura del nuovo record corrente
+        new_record = {
+            "task_id": task_id,
+            "timestamp": datetime.now().isoformat(),
+            "provider": provider,
+            "model_name": model_name,
+            "prompt_type": prompt_type,
+            "execution_time_seconds": round(execution_time, 2),
+            "status": status,
+            "error_message": error_msg,
+            "metrics": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens
+            },
+            "solution_file_path": solution_path,  # <--- Tracciato nel JSON
+            "test_file_path": test_path,
+            "test_verified_status": "pending"
+        }
+
+        filtered_records = [record for record in records if not is_same_config(record)]
+        if len(filtered_records) != len(records):
+            print(f"[Logger] Record esistente aggiornato per {task_id} ({model_name} - {prompt_type}).")
+        else:
+            print(f"[Logger] Nuovo record registrato per {task_id} ({model_name} - {prompt_type}).")
+
+        filtered_records.append(new_record)
+        records = filtered_records
 
     # Salvataggio su disco (JSON)
     with open(json_file, 'w', encoding='utf-8') as f:
@@ -187,13 +191,31 @@ def log_eco_batch_result(provider, model_name, prompt_type, total_tasks, failed_
             and record.get("prompt_type", "raw") == prompt_type
         )
 
-    # Filtra il record analogo e aggiungi quello nuovo (aggiornamento logico)
-    filtered_records = [r for r in records if not is_same_config(r)]
-    filtered_records.append(new_record)
+    # Filtra il record analogo
+    existing_record = next((r for r in records if is_same_config(r)), None)
+    
+    if existing_record:
+        # Se esiste, sommiamo i valori invece di sovrascriverli
+        existing_record["timestamp"] = new_record["timestamp"]
+        existing_record["total_tasks"] = int(existing_record.get("total_tasks", 0)) + new_record["total_tasks"]
+        existing_record["failed_tasks"] = int(existing_record.get("failed_tasks", 0)) + new_record["failed_tasks"]
+        existing_record["total_latency_sec"] = round(float(existing_record.get("total_latency_sec", 0.0)) + new_record["total_latency_sec"], 4)
+        
+        # Per la RAM, l'energia e la CO2 sommiamo l'impatto cumulativo
+        existing_record["ram_delta_mb"] = round(float(existing_record.get("ram_delta_mb", 0.0)) + new_record["ram_delta_mb"], 4)
+        existing_record["energy_kwh"] = round(float(existing_record.get("energy_kwh", 0.0)) + new_record["energy_kwh"], 8)
+        existing_record["co2_g"] = round(float(existing_record.get("co2_g", 0.0)) + new_record["co2_g"], 6)
+        
+        final_records = records
+        print(f"[Logger] Aggiornato record esistente (cumulativo) in eco_metrics.csv per {model_name} ({prompt_type}).")
+    else:
+        # Se non esiste, aggiungiamo semplicemente il nuovo record
+        final_records = records + [new_record]
+        print(f"[Logger] Nuovo record aggiunto in eco_metrics.csv per {model_name} ({prompt_type}).")
 
     with open(csv_file, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(filtered_records)
+        writer.writerows(final_records)
 
-    print(f"[Logger] Metriche ambientali salvate in {csv_file} ({str(len(filtered_records))} records totali)")
+    print(f"[Logger] Metriche ambientali salvate in {csv_file} ({str(len(final_records))} records totali)")

@@ -32,8 +32,9 @@ def sanitize_test_file(file_path: str):
             cleaned_lines.append(line)
             continue
 
-        # 1. Rimuove i blocchi di formattazione Markdown
+        # 1. Commenta i blocchi di formattazione Markdown
         if stripped.startswith("```"):
+            cleaned_lines.append(f"# {line}")
             continue
 
         # 2. Rimuove gli import finti (es. from your_module import ...)

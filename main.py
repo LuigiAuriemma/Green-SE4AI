@@ -75,7 +75,7 @@ def main():
 
     # Intercetta automaticamente le chiamate OpenAI e Google GenAI
     EcoLogits.init(providers=['openai'])
-    LIMIT_PROBLEMI = 2
+    LIMIT_PROBLEMI = 50
 
     # DECIDI QUALE PROMPT TESTARE ("raw" o "green")
     PROMPT_TYPE = "green"
@@ -85,6 +85,21 @@ def main():
     if not dataset:
         print("[Errore] Dataset vuoto o non caricato.")
         return
+
+    # =======================================================
+    # ESECUZIONE MIRATA DI UN SINGOLO RECORD
+    # =======================================================
+    # Imposta TARGET_TASK_ID con il task_id desiderato (es. 'HumanEval/2')
+    # Lascia a None per eseguire l'intero dataset.
+    TARGET_TASK_ID = None  # <-- Modifica qui se vuoi testare un singolo task
+
+    if TARGET_TASK_ID:
+        dataset = [p for p in dataset if p['task_id'] == TARGET_TASK_ID]
+        if not dataset:
+            print(f"[Attenzione] Nessun record trovato con task_id: {TARGET_TASK_ID}")
+            return
+        print(f"\n[Info] Esecuzione limitata al solo task: {TARGET_TASK_ID}")
+    # =======================================================
 
     # Caricamento del modello di inferenza tramite Factory
     try:
